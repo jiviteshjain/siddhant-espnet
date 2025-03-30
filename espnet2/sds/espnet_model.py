@@ -18,6 +18,7 @@ from espnet2.sds.tts.espnet_tts import ESPnetTTSModel
 from espnet2.sds.utils.chat import Chat
 from espnet2.sds.vad.webrtc_vad import WebrtcVADModel
 from espnet2.train.abs_espnet_model import AbsESPnetModel
+from espnet2.sds.turn_taking.talking_turns import TalkingTurnsModel
 
 if V(torch.__version__) >= V("1.6.0"):
     from torch.cuda.amp import autocast
@@ -85,7 +86,8 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         self.s2t = None
         self.LM_pipe = None
         self.client = None
-        self.vad_model = WebrtcVADModel()
+        # self.vad_model = WebrtcVADModel()
+        self.turn_taking_model = TalkingTurnsModel(data_path="/home/jivitesj/projects/speech/")
         self.chat = Chat(2)
         self.chat.init_chat(
             {
@@ -321,9 +323,9 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         orig_sr = sr
         sr = 16000
         if self.client is not None:
-            array = self.vad_model(y, orig_sr, binary=True)
+            array = self.turn_taking_model(y, orig_sr, binary=True)
         else:
-            array = self.vad_model(y, orig_sr)
+            array = self.turn_taking_model(y, orig_sr)
         change = False
         if array is not None:
             print("VAD: end of speech detected")
