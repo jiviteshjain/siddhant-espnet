@@ -6,6 +6,7 @@ import librosa
 from typing import Optional, List
 
 from espnet2.bin.asr_inference import Speech2Text
+from espnet2.bin.slu_inference import Speech2Understand
 from espnet2.sds.utils.utils import int2float
 
 
@@ -21,10 +22,9 @@ class TalkingTurnsModel(torch.nn.Module):
         self.data_path = data_path
         self.device = device
         self.target_sample_rate = target_sample_rate
-        self.model = Speech2Text(os.path.join(data_path, "config.yaml"),
+        self.model = Speech2Understand(os.path.join(data_path, "config.yaml"),
                                  os.path.join(data_path, "valid.loss.ave.pth"),
-                                 device=device,
-                                 run_chunk=True)
+                                 device=device, run_chunk=True)
         
         self.stored_audio: Optional[np.ndarray] = None
         self.stored_bin_audio: Optional[np.ndarray] = None

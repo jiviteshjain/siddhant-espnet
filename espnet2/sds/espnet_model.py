@@ -328,7 +328,7 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
             array = self.turn_taking_model(y, orig_sr)
         change = False
         if array is not None:
-            print("VAD: end of speech detected")
+            print("Turn taking: end of speech detected")
             start_time = time.time()
             if self.client is not None:
                 (text_str, audio_output) = self.client(array, orig_sr)
