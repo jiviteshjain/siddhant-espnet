@@ -36,6 +36,7 @@ try:
 except ImportError:
     is_gradio_available = False
 
+TALKING_TURNS_DATA_PATH = "/home/jivitesj/projects/speech/"
 
 class ESPnetSDSModelInterface(AbsESPnetModel):
     """Web Interface for Spoken Dialog System models
@@ -87,7 +88,9 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         self.LM_pipe = None
         self.client = None
         # self.vad_model = WebrtcVADModel()
-        self.turn_taking_model = TalkingTurnsModel(data_path="/home/jivitesj/projects/speech/")
+        # self.turn_taking_model = TalkingTurnsModel(data_path="/home/jivitesj/projects/speech/")
+        self.turn_taking_model = WebrtcVADModel()
+        self.turn_taking_model_name = "WebrtcVAD"
         self.chat = Chat(2)
         self.chat.init_chat(
             {
@@ -155,6 +158,35 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         self.LM_pipe.warmup()
         yield gr.Textbox(visible=True), gr.Textbox(visible=True), gr.Audio(visible=True)
 
+    def handle_turn_taking_selection(self, option: str):
+        """Handles the selection and initialization of a turn-taking model.
+
+        This method dynamically loads the selected turn-taking model based
+        on the provided option.
+        If the selected model is already active, it avoids reloading to save resources.
+        The method temporarily removes the visibility of Gradio outputs during the
+        initialization process to indicate progress.
+
+        Args:
+            option (str):
+                The name of the turn-taking model to load.
+        """
+        
+        if self.turn_taking_model_name is not None:
+            if option == self.turn_taking_model_name:
+                return
+        yield gr.Textbox(visible=False), gr.Textbox(visible=False), gr.Audio(
+            visible=False
+        )
+        self.turn_taking_model_name = option
+        if option == "WebrtcVAD":
+            self.turn_taking_model = WebrtcVADModel()
+        elif option == "TalkingTurns":
+            self.turn_taking_model = TalkingTurnsModel(data_path=TALKING_TURNS_DATA_PATH)
+        
+        self.turn_taking_model.warmup()
+        yield gr.Textbox(visible=True), gr.Textbox(visible=True), gr.Audio(visible=True)
+
     def handle_ASR_selection(self, option: str):
         """Handles the selection and initialization of ASR model.
 
@@ -204,7 +236,7 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
             self.client.warmup()
 
     def handle_type_selection(
-        self, option: str, TTS_radio: str, ASR_radio: str, LLM_radio: str
+        self, option: str, TTS_radio: str, Turn_radio: str, ASR_radio: str, LLM_radio: str
     ):
         """Handles the selection of the spoken dialogue model type (Cascaded or E2E)
 
@@ -219,12 +251,15 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
                 The selected spoken dialogue system.
             TTS_radio (str):
                 The selected TTS model for the Cascaded system.
+            Turn_radio (str):
+                The selected Turn Taking model for the Cascaded system.
             ASR_radio (str):
                 The selected ASR model for the Cascaded system.
             LLM_radio (str):
                 The selected LLM model for the Cascaded system.
         """
         yield (
+            gr.Radio(visible=False),
             gr.Radio(visible=False),
             gr.Radio(visible=False),
             gr.Radio(visible=False),
@@ -240,11 +275,14 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
             self.type_option = "Cascaded"
             for _ in self.handle_TTS_selection(TTS_radio):
                 continue
+            for _ in self.handle_turn_taking_selection(Turn_radio):
+                continue
             for _ in self.handle_ASR_selection(ASR_radio):
                 continue
             for _ in self.handle_LLM_selection(LLM_radio):
                 continue
             yield (
+                gr.Radio(visible=True),
                 gr.Radio(visible=True),
                 gr.Radio(visible=True),
                 gr.Radio(visible=True),
@@ -258,13 +296,16 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         else:
             self.type_option = "E2E"
             self.text2speech = None
+            self.turn_taking_model = None
             self.s2t = None
             self.LM_pipe = None
+            self.turn_taking_model_name = None
             self.ASR_curr_name = None
             self.LLM_curr_name = None
             self.TTS_curr_name = None
             self.handle_E2E_selection()
             yield (
+                gr.Radio(visible=False),
                 gr.Radio(visible=False),
                 gr.Radio(visible=False),
                 gr.Radio(visible=False),
