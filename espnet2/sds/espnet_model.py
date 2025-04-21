@@ -19,6 +19,7 @@ from espnet2.sds.utils.chat import Chat
 from espnet2.sds.vad.webrtc_vad import WebrtcVADModel
 from espnet2.train.abs_espnet_model import AbsESPnetModel
 from espnet2.sds.turn_taking.talking_turns import TalkingTurnsModel, TalkingTurnsJudge
+from espnet2.sds.vap_turn.vap_model import VAPModel
 
 if V(torch.__version__) >= V("1.6.0"):
     from torch.cuda.amp import autocast
@@ -89,15 +90,18 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         self.client = None
         # self.vad_model = WebrtcVADModel()
         # self.turn_taking_model = TalkingTurnsModel(data_path="/home/jivitesj/projects/speech/")
-        self.turn_taking_model = WebrtcVADModel()
+        self.turn_taking_mode = WebrtcVADModel()
         self.turn_taking_model_name = "WebrtcVAD"
-
-        self.turn_taking_judge = TalkingTurnsJudge(
-            data_path=TALKING_TURNS_DATA_PATH
-        )
+        self.use_judge = False
+        if self.use_judge:
+            self.turn_taking_judge = TalkingTurnsJudge(
+                data_path=TALKING_TURNS_DATA_PATH
+            )
         self.tt_num_correct = 0
         self.tt_num_total = 0
-        self.use_judge = True
+        
+        self.tt_delay = 0
+        self.tt_delay_count = 0
 
         self.chat = Chat(2)
         self.chat.init_chat(
@@ -189,15 +193,20 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         self.turn_taking_model_name = option
         if option == "WebrtcVAD":
             self.turn_taking_model = WebrtcVADModel()
-            self.use_judge = True
+            # TODO: do we need this?
+            # self.use_judge = True
         elif option == "TalkingTurns":
             self.turn_taking_model = TalkingTurnsModel(data_path=TALKING_TURNS_DATA_PATH)
             self.use_judge = False
-        
+        elif option == "VAP":
+            self.turn_taking_model = VAPModel()
         self.turn_taking_model.warmup()
         self.tt_num_correct = 0
         self.tt_num_total = 0
-        self.turn_taking_judge.clear_buffer()
+        self.tt_delay = 0
+        self.tt_delay_count = 0
+        if self.use_judge:
+            self.turn_taking_judge.clear_buffer()
         yield gr.Textbox(visible=True), gr.Textbox(visible=True), gr.Audio(visible=True)
 
     def handle_ASR_selection(self, option: str):
@@ -376,16 +385,29 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         """
         orig_sr = sr
         sr = 16000
-        if self.client is not None:
-            array = self.turn_taking_model(y, orig_sr, binary=True)
-            if self.use_judge:
-                array_judge = self.turn_taking_judge(
-                    y, orig_sr, binary=True
-                )
-        else:
-            array = self.turn_taking_model(y, orig_sr)
-            if self.use_judge:
-                array_judge = self.turn_taking_judge(y, orig_sr)
+        binary = self.client is not None
+        start_time = time.time()
+        array = self.turn_taking_model(y, orig_sr, binary=True)
+        end_time = time.time()
+        self.tt_delay_count += 1
+        self.tt_delay += (end_time-start_time)
+
+        if self.use_judge:
+            array_judge = self.turn_taking_judge(
+                y, orig_sr, binary=True
+            )
+        
+        # if self.client is not None:
+        #     array = self.turn_taking_model(y, orig_sr, binary=True)
+        #     if self.use_judge:
+        #         array_judge = self.turn_taking_judge(
+        #             y, orig_sr, binary=True
+        #         )
+            
+        # else:
+        #     array = self.turn_taking_model(y, orig_sr)
+        #     if self.use_judge:
+        #         array_judge = self.turn_taking_judge(y, orig_sr)
 
         if self.use_judge:
             self.update_metrics(array is not None, array_judge is not None)
@@ -394,7 +416,8 @@ class ESPnetSDSModelInterface(AbsESPnetModel):
         if array is not None:
             
             # actual model cleared its buffer
-            self.turn_taking_judge.clear_buffer()
+            if self.use_judge:
+                self.turn_taking_judge.clear_buffer()
             
             print("Turn taking: end of speech detected")
             start_time = time.time()
